@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>财务管理在线刷题系统（自动保存进度）</title>
+    <!-- 二维码生成库 -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+    <style>
+        * {margin:0;padding:0;box-sizing:border-box;font-family:system-ui,Microsoft YaHei}
+        body {background:#f5f7fa;color:#333;padding:10px;max-width:1200px;margin:0 auto}
+        header {background:#2563eb;color:white;padding:16px;border-radius:10px;margin-bottom:15px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+        .qrcode-box {background:white;padding:10px;border-radius:8px;text-align:center}
+        #qrcode {width:160px;height:160px;margin:0 auto}
+        .save-tip {font-size:12px;color:#dcfce7;margin-top:4px}
+        .container {display:grid;grid-template-columns:220px 1fr;gap:15px}
+        @media(max-width:768px) {.container {grid-template-columns:1fr}}
+        .sidebar {background:white;border-radius:10px;padding:15px;height:fit-content}
+        .sidebar h3 {margin-bottom:12px;color:#2563eb}
+        .menu-btn {display:block;width:100%;padding:10px;margin:6px 0;border:none;border-radius:6px;background:#eff6ff;color:#2563eb;text-align:left;cursor:pointer}
+        .menu-btn.active {background:#2563eb;color:white}
+        .main-box {background:white;border-radius:10px;padding:20px;min-height:600px}
+        .question-item {border-bottom:1px solid #eee;padding:18px 0}
+        .question-title {font-size:16px;font-weight:500;margin-bottom:12px;line-height:1.6}
+        .option-item {margin:8px 0;padding:10px;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer}
+        .option-item:hover {background:#f8fafc}
+        .option-item.selected {border-color:#2563eb;background:#eff6ff}
+        .option-item.correct {border-color:#10b981;background:#f0fdf4}
+        .option-item.error {border-color:#ef4444;background:#fef2f2}
+        .btn-group {margin-top:20px;display:flex;gap:12px;flex-wrap:wrap}
+        button {padding:10px 20px;border:none;border-radius:6px;cursor:pointer;font-size:15px}
+        #submitBtn {background:#2563eb;color:white}
+        #resetBtn {background:#94a3b8;color:white}
+        .score-box {margin:15px 0;padding:12px;background:#f0fdf4;border-radius:8px;color:#065f46;display:none}
+        .answer-desc {margin-top:10px;padding:10px;background:#fefce8;border-radius:6px;color:#92400e;display:none}
+        .tip {font-size:13px;color:#666;margin-top:8px}
+    </style>
+</head>
+<body>
+<header>
+    <div>
+        <h1>财务管理刷题平台</h1>
+        <p class="save-tip">💾 作答实时自动保存，关闭页面不丢失进度</p>
+    </div>
+    <div class="qrcode-box">
+        <div id="qrcode"></div>
+        <p class="tip">手机扫码打开刷题页面</p>
+    </div>
+</header>
+<div class="container">
+    <aside class="sidebar">
+        <h3>题库分类</h3>
+        <button class="menu-btn active" data-type="all">全部习题</button>
+        <button class="menu-btn" data-type="single">单项选择题</button>
+        <button class="menu-btn" data-type="multi">多项选择题</button>
+        <button class="menu-btn" data-type="wrong">错题重做</button>
+        <h3 style="margin-top:20px">操作</h3>
+        <button class="menu-btn" onclick="resetAll()">清空所有作答记录</button>
+        <button class="menu-btn" onclick="clearWrong()">清空错题本</button>
+    </aside>
+    <main class="main-box" id="paperBox">
+        加载题库中...
+    </main>
+</div>
+
+<script>
+// 存储键名
+const STORAGE_KEY_ANSWER = "finance_user_answer";
+const STORAGE_KEY_WRONG = "finance_wrong_list";
+
+// 1. 生成当前页面二维码
+function createQR() {
+    const url = window.location.href;
+    QRCode.toCanvas(document.getElementById('qrcode'), url, {width:160}, err=>{
+        if(err) console.error(err)
+    })
+}
+createQR();
+
+// 2. 从本地存储读取保存的作答、错题
+let userAnswer = JSON.parse(localStorage.getItem(STORAGE_KEY_ANSWER)) || {};
+let wrongList = JSON.parse(localStorage.getItem(STORAGE_KEY_WRONG)) || [];
+let nowType = "all";
+
+// 实时保存作答记录到本地
+function autoSaveAnswer() {
+    localStorage.setItem(STORAGE_KEY_ANSWER, JSON.stringify(userAnswer));
+}
+// 保存错题
+function saveWrongList() {
+    localStorage.setItem(STORAGE_KEY_WRONG, JSON.stringify(wrongList));
+}
+
+// 定时兜底保存（每10秒）
+setInterval(()=>{
+    autoSaveAnswer();
+    saveWrongList();
+}, 10000);
+
+// 完整财务题库（取自你提供文档）
+const questionList = [
+    // 单选
+    {
+        id:1,type:"single",title:"在下列各种观点中,既能够考虑资金的时间价值和投资风险,又有利于克服管理上的片面性和短期行为的财务管理目标是()",
+        options:["A、利润最大化","B、企业价值最大化","C、每股收益最大化","D、资本利润率最大化"],
+        answer:[1],desc:"企业价值最大化兼顾时间价值、风险，规避短期行为；其余目标均存在缺陷"
+    },
+    {
+        id:2,type:"single",title:"股东协调与经营者利益关系的核心手段不包括以下哪一项()",
+        options:["A. 实施股权激励计划","B. 委派监事进行日常监督","C. 通过资本市场恶意收购公司","D. 建立绩效与薪酬挂钩的考核体系"],
+        answer:[1],desc:"监事监督属于股东对经营者的监督手段，不属于利益协调激励手段"
+    },
+    {
+        id:3,type:"single",title:"某人分期购买一辆汽车,每年年末支付10000 元,分5 次付清,假设年利率为5%,则该项分期付款相当于现在一次性支付()元",
+        options:["A.55256","B.43259","C.43295","D.55265"],
+        answer:[2],desc:"普通年金现值=10000*(P/A,5%,5)=10000*4.3295=43295"
+    },
+    {
+        id:4,type:"single",title:"应收账款周转率等于()",
+        options:["A、销售收入净额/应收账款平均余额","B、销售收入净额/应收账款期末余额","C、赊销收入净额/应收账款平均余额","D、现销收入总额/应收账款平均余额"],
+        answer:[2],desc:"应收账款周转率标准公式：赊销净额÷应收账款平均余额"
+    },
+    {
+        id:5,type:"single",title:"经营杠杆给企业带来的风险是指()",
+        options:["A、业务量变动导致息税前利润更大变动的风险","B、业务量变动导致息税前利润同比例变动的风险","C、利润下降的风险","D、成本上升的风险"],
+        answer:[0],desc:"经营杠杆定义：销量小幅波动，息税前利润成倍波动的经营风险"
+    },
+    {
+        id:6,type:"single",title:"下列各项中,不能通过证券组合分散的风险是()",
+        options:["A.非系统性风险","B.公司特别风险","C.可分散风险","D.市场风险"],
+        answer:[3],desc:"市场风险（系统风险）无法通过投资组合分散"
+    },
+    {
+        id:7,type:"single",title:"普通年金终值系数的倒数称为()",
+        options:["A.复利终值系数","B.偿债基金系数","C.普通年金现值系数","D.投资回收系数"],
+        answer:[1],desc:"偿债基金系数 = 1 / 年金终值系数"
+    },
+    {
+        id:8,type:"single",title:"下列筹资活动不会加大财务杠杆作用的是()",
+        options:["A.增发普通股","B.增发优先股","C.增发公司债券","D.增加银行借款"],
+        answer:[0],desc:"普通股无固定利息，不会产生财务杠杆；债务、优先股均会放大财务杠杆"
+    },
+    {
+        id:9,type:"single",title:"某制造企业处于成熟稳定期,盈利水平波动较小,投资者对股利的稳定性要求较高。该企业最适宜采用的股利政策是()",
+        options:["A. 剩余股利政策","B. 固定股利政策","C. 固定股利支付率政策","D. 低正常股利加额外股利政策"],
+        answer:[1],desc:"固定股利政策每年发放稳定股利，满足投资者稳定分红需求"
+    },
+    {
+        id:10,type:"single",title:"投资决策评价方法中,对于互斥方案来说,最好的评价方法是()",
+        options:["A、净现值法","B、现值指数法","C、内部报酬率","D、平均报酬率"],
+        answer:[0],desc:"互斥项目年限相同时，净现值法优先，追求企业总收益最大化"
+    },
+    // 多选
+    {
+        id:101,type:"multi",title:"财务报表分析的基本方法有()",
+        options:["A.比较分析法","B.比率分析法","C.因素分析法","D.差额计算法"],
+        answer:[0,1,2],desc:"财务分析三大基础方法：比较、比率、因素分析法；差额计算属于因素分析分支"
+    },
+    {
+        id:102,type:"multi",title:"关于债券票面利率、市场利率与发行价格的关系,下列表述正确的有()",
+        options:["A. 市场利率是债券定价的折现率,决定未来现金流的现值","B. 当票面利率低于市场利率时,债券发行价格低于面值","C. 溢价发行的债券,其票面利率一定高于同期市场利率","D. 平价发行的债券,未来支付的本息和的现值应该等于面值"],
+        answer:[0,1,2,3],desc:"四项表述均符合债券定价原理"
+    },
+    {
+        id:103,type:"multi",title:"下列属于股利相关论的有()",
+        options:["A.一鸟在手理论","B.信号传递理论","C.代理理论","D.MM理论"],
+        answer:[0,1,2],desc:"MM股利无关论；一鸟在手、信号传递、代理理论均为股利相关论"
+    },
+    {
+        id:104,type:"multi",title:"在投资决策分析中使用的贴现现金流量指标有()",
+        options:["A.净现值","B.内部报酬率","C.投资回收期","D.获利指数"],
+        answer:[0,1,3],desc:"静态回收期不折现；NPV、IRR、PI均为动态贴现指标"
+    },
+    {
+        id:105,type:"multi",title:"企业降低经营风险的途径一般有()",
+        options:["A.增加销售量","B.增加自有资本","C.降低变动成本","D.增加固定成本比例"],
+        answer:[0,2],desc:"提高销量、降低单位变动成本可降低经营杠杆，减少经营风险"
+    }
+]
+
+// 渲染题库
+function renderPaper() {
+    const box = document.getElementById("paperBox");
+    let filterList = questionList;
+    if(nowType==="single") filterList = questionList.filter(i=>i.type==="single");
+    if(nowType==="multi") filterList = questionList.filter(i=>i.type==="multi");
+    if(nowType==="wrong") filterList = questionList.filter(i=>wrongList.includes(i.id));
+    if(filterList.length===0) {
+        box.innerHTML = "<p>暂无对应题目</p>";
+        return;
+    }
+    let html = "";
+    filterList.forEach(q=>{
+        const userSel = userAnswer[q.id] || [];
+        html += `<div class="question-item" data-qid="${q.id}">
+            <p class="question-title">${q.id}. ${q.type==="single"?"【单选】":"【多选】"}${q.title}</p>
+            <div class="option-wrap">`;
+        q.options.forEach((opt,idx)=>{
+            let cls = "option-item";
+            if(userSel.includes(idx)) cls += " selected";
+            html += `<div class="${cls}" data-opt="${idx}" onclick="selectOpt(${q.id},${idx})">${opt}</div>`;
+        })
+        html += `</div>
+        <div class="btn-group">
+            <button onclick="submitSingle(${q.id})" id="sub${q.id}">查看答案</button>
+        </div>
+        <div class="score-box" id="score${q.id}"></div>
+        <div class="answer-desc" id="desc${q.id}">解析：${q.desc}</div>
+        </div>`;
+    })
+    box.innerHTML = html;
+}
+
+// 选择选项：选中后立刻自动保存
+function selectOpt(qid, optIdx) {
+    const q = questionList.find(i=>i.id===qid);
+    if(!userAnswer[qid]) userAnswer[qid] = [];
+    const arr = userAnswer[qid];
+    // 单选只能选一个
+    if(q.type==="single") {
+        arr.length = 0;
+        arr.push(optIdx);
+    } else {
+        // 多选切换
+        if(arr.includes(optIdx)) arr.splice(arr.indexOf(optIdx),1);
+        else arr.push(optIdx);
+    }
+    autoSaveAnswer(); // 实时保存
+    renderPaper();
+}
+
+// 单题提交判分
+function submitSingle(qid) {
+    const q = questionList.find(i=>i.id===qid);
+    const userSel = userAnswer[qid] || [];
+    const scoreDom = document.getElementById("score"+qid);
+    const descDom = document.getElementById("desc"+qid);
+    const right = q.answer.sort().join(",");
+    const user = userSel.sort().join(",");
+    if(user === right) {
+        scoreDom.style.display = "block";
+        scoreDom.innerHTML = "✅ 回答正确";
+        // 移除错题
+        wrongList = wrongList.filter(i=>i!==qid);
+    } else {
+        scoreDom.style.display = "block";
+        scoreDom.innerHTML = `❌ 回答错误，正确选项：${q.answer.map(x=>q.options[x][0]).join("、")}`;
+        if(!wrongList.includes(qid)) wrongList.push(qid);
+    }
+    saveWrongList(); // 保存错题
+    descDom.style.display = "block";
+}
+
+// 切换题库分类
+document.querySelectorAll(".menu-btn").forEach(btn=>{
+    btn.onclick = function() {
+        document.querySelectorAll(".menu-btn").forEach(b=>b.classList.remove("active"));
+        this.classList.add("active");
+        nowType = this.dataset.type;
+        renderPaper();
+    }
+})
+
+// 清空所有作答记录
+function resetAll() {
+    userAnswer = {};
+    autoSaveAnswer();
+    renderPaper();
+}
+
+// 清空错题
+function clearWrong() {
+    wrongList = [];
+    saveWrongList();
+    renderPaper();
+}
+
+// 页面加载完成渲染
+window.onload = function() {
+    renderPaper();
+}
+</script>
+</body>
+</html>
