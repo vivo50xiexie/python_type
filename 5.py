@@ -1,0 +1,5 @@
+print(int(True))
+print(int(False))
+print(bool(0))
+print(bool('rgsrg'))
+print(bool({}))
